@@ -1225,6 +1225,13 @@ Date: ${iso(new Date()).slice(0, 10)} 08:05`;
         <li><b>اختصار اختياري:</b> في تطبيق «الاختصارات» ← «الأتمتة» ← «رسالة» ← اختر مرسل البنك (مثل <span class="mono">AlRajhiBank</span>) ← أضف إجراء «نسخ إلى الحافظة» لمحتوى الرسالة ← «تشغيل فوري». بعدها يكفي أن تفتح التطبيق وتلصق.</li>
       </ol>
     </details>
+    <details class="card"><summary>استخدامه على الأندرويد</summary>
+      <ol class="steps">
+        <li><b>ثبّت التطبيق:</b> افتح الرابط في متصفح <b>Chrome</b> ← القائمة ⋮ ← «تثبيت التطبيق» أو «إضافة إلى الشاشة الرئيسية».</li>
+        <li><b>عند وصول رسالة البنك:</b> اضغط مطولاً على الرسالة ← «مشاركة» ← اختر <b>ميزانيتي</b>.</li>
+        <li>يفتح التطبيق والرسالة مقروءة وجاهزة ← راجعها واضغط «حفظ».</li>
+      </ol>
+    </details>
     <details class="card"><summary>قواعد التصنيف المحفوظة (${fmt(rules.length, 0)})</summary>
       <p class="small muted" style="margin-top:0">عندما تغيّر فئة عملية وتختار «تذكّر»، يحفظ التطبيق القاعدة ويطبّقها على رسائل هذا المتجر مستقبلاً.</p>
       ${rules.length ? rules.map(([k, v]) => `<div class="rule"><span>${esc(k)} ← ${CAT[v]?.icon || ''} ${esc(CAT[v]?.name || v)}</span><button class="btn ghost" style="padding:4px 10px" data-delrule="${esc(k)}">حذف</button></div>`).join('') : '<div class="small muted">لا توجد قواعد بعد</div>'}
@@ -1442,10 +1449,21 @@ Date: ${iso(new Date()).slice(0, 10)} 08:05`;
   let rz; window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { if (state.tab === 'reports') render(); }, 150); });
 
   if (location.hash === '#iphone') state.tab = 'settings';
+  // Android share sheet: a bank SMS shared to the installed app arrives as ?text=… — open it ready to save.
+  let sharedText = '';
+  try {
+    const qs = new URLSearchParams(location.search);
+    sharedText = [qs.get('title'), qs.get('text')].filter(Boolean).join('\n').trim();
+    if (sharedText) history.replaceState(null, '', location.pathname);
+  } catch (e) { sharedText = ''; }
   // First paint shows the layout (with marked sample data) while storage connects.
   state.mode = 'connecting';
   render();
-  Store.init();
+  Store.init().then(() => {
+    if (!sharedText) return;
+    state.tab = 'add'; state.addMode = 'sms'; render();
+    $('#sms-in').value = sharedText; doParse();
+  });
 })();
 </script>
 
