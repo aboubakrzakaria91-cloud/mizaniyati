@@ -12,3 +12,8 @@
 - `pwa/` — ملف التطبيق (manifest) وخدمة العمل بدون إنترنت والأيقونات.
 - `docs/` — النسخة المنشورة على GitHub Pages (تُولَّد بـ `./build.sh`، لا تعدّلها يدوياً).
 - `test/parser.test.js` — أمثلة رسائل: `node test/parser.test.js`.
+
+## تطبيق الأندرويد (APK)
+- `android/` — تطبيق أندرويد يعرض نفس الواجهة ويقرأ رسائل البنك تلقائياً (صلاحية READ_SMS).
+- البناء: `./build.sh` ثم `cd android && gradle assembleRelease`، والناتج يُنسخ إلى `docs/mizaniyati.apk`.
+- مفتاح التوقيع في `android/keystore/` ثابت حتى يُثبَّت كل إصدار جديد فوق القديم دون فقدان البيانات.

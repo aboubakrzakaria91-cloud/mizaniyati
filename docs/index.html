@@ -785,6 +785,46 @@ function splitMessages(raw) {
   function setProfile(patch) { state.profile = { ...state.profile, ...patch }; Store.saveProfile(); if (state.mode !== 'cloud') Store.saveLocal(); }
   function knownHashes() { return new Set(realTxns().map((t) => t.hash).filter(Boolean)); }
 
+  // ---------- Android app (APK): reads bank SMS from the inbox through a native bridge ----------
+  const Native = window.MizaniyatiAndroid || null;
+  const nativeSmsOn = () => { try { return !!(Native && Native.hasSmsPermission()); } catch (e) { return false; } };
+  const TXN_WORDS = /(شراء|سحب|حوالة|حواله|تحويل|إيداع|ايداع|راتب|استرداد|مسترد|سداد|خصم من|مدين|دائن|Purchase|POS|Withdraw|Transfer|Deposit|Salary|Refund|Payment|debited|credited)/i;
+  const PROMO_WORDS = /(عرض|عروض|اربح|فرصة|احصل على|سارع|offer|promo|\bwin\b|cashback|كاش باك|\d\s?%|٪)/i;
+  function smsSyncFrom() { return state.profile.smsSince || periodAt(-2).start.getTime(); }
+  function syncSms(since) {
+    if (!nativeSmsOn()) return 0;
+    let msgs = [];
+    try { msgs = JSON.parse(Native.readSms(String(since ?? smsSyncFrom()))) || []; } catch (e) { msgs = []; }
+    const hashes = knownHashes(), add = [];
+    let last = state.profile.smsSince || 0;
+    for (const m of msgs) {
+      last = Math.max(last, m.date + 1);
+      // Bank senders are names (AlRajhiBank, SNB-AlAhli…) or short codes; full phone numbers are personal chats.
+      if (/^\+?\d{8,}$/.test(String(m.address || '').replace(/[\s-]/g, ''))) continue;
+      if (!TXN_WORDS.test(m.body) || PROMO_WORDS.test(m.body)) continue;
+      const r = parseSms(m.body, { rules: state.profile.rules, now: new Date(m.date) });
+      if (!r.ok || hashes.has(r.hash)) continue;
+      hashes.add(r.hash);
+      add.push({ id: uid(), type: r.type, amount: r.amount, cat: r.cat, merchant: (r.merchant || '').trim(), date: r.date, method: r.method || '',
+        note: r.currency !== 'SAR' ? 'المبلغ بعملة ' + r.currency : '', source: 'sms', hash: r.hash, raw: r.raw.slice(0, 600), bank: r.bank || m.address || '' });
+    }
+    if (add.length) addTxns(add);
+    if (last !== (state.profile.smsSince || 0) || !state.profile.smsSyncedAt) setProfile({ smsSince: last, smsSyncedAt: Date.now() });
+    else setProfile({ smsSyncedAt: Date.now() });
+    if (add.length) toast('أُضيفت ' + fmt(add.length, 0) + (add.length === 1 ? ' عملية' : ' عمليات') + ' من رسائل البنك');
+    render();
+    return add.length;
+  }
+  window.onSmsPermission = (granted) => {
+    if (granted) { const n = syncSms(); if (!n) toast('تم التفعيل — لا توجد رسائل بنك جديدة'); }
+    else { toast('لم يتم منح صلاحية قراءة الرسائل'); render(); }
+  };
+  window.mizaniyatiResume = () => { if (nativeSmsOn()) syncSms(); };
+  window.mizaniyatiShare = (text) => {
+    state.tab = 'add'; state.addMode = 'sms'; render();
+    $('#sms-in').value = String(text || ''); doParse();
+  };
+
   // ---------- periods ----------
   function startDay() { return Math.min(28, Math.max(1, state.profile.startDay || 1)); }
   function periodAt(offset) {
@@ -870,10 +910,16 @@ function splitMessages(raw) {
     </div>`;
   }
 
+  function nativeBanner() {
+    if (!Native || nativeSmsOn()) return '';
+    return `<div class="banner sample"><span><b>فعّل قراءة رسائل البنك تلقائياً</b> ليسجّل التطبيق عملياتك بنفسه بدون نسخ ولصق.</span>
+      <button class="btn" data-act="sms-enable" style="padding:8px 14px">تفعيل</button></div>`;
+  }
+
   function sampleBanner() {
-    if (!isSample()) return '';
+    if (!isSample()) return nativeBanner();
     return `<div class="banner sample"><span><b>هذه بيانات توضيحية</b> لتتعرف على التطبيق. ستختفي تلقائياً عند إضافة أول عملية لك.</span>
-      <button class="btn" data-go="add" style="padding:8px 14px">أضف أول عملية</button></div>`;
+      <button class="btn" data-go="add" style="padding:8px 14px">أضف أول عملية</button></div>${nativeBanner()}`;
   }
 
   function txRow(t) {
@@ -1215,6 +1261,13 @@ Date: ${iso(new Date()).slice(0, 10)} 08:05`;
       <p class="small muted" style="margin-top:0">حدد سقفاً لأي فئة وسيظهر لك تنبيه عند الوصول إلى 80٪ منه. اترك الخانة فارغة لإلغائه.</p>
       <div class="set-list">${EXP_CATS.map((c) => `<div class="setrow"><span aria-hidden="true">${c.icon}</span><label for="cb-${c.id}">${esc(c.name)}</label><input id="cb-${c.id}" type="text" inputmode="decimal" data-cb="${c.id}" placeholder="—" value="${cb[c.id] ? esc(cb[c.id]) : ''}"></div>`).join('')}</div>
     </details>
+    ${Native ? `<div class="card" style="display:grid;gap:10px"><h2 style="margin:0">قراءة رسائل البنك تلقائياً</h2>
+      ${nativeSmsOn() ? `<div class="pill good" style="justify-self:start">✓ مفعّلة</div>
+      <p class="small muted" style="margin:0">يقرأ التطبيق رسائل البنوك الجديدة كلما فتحته، ويتجاهل الرسائل الشخصية ورموز التحقق والعروض.${state.profile.smsSyncedAt ? ' آخر مزامنة: ' + esc(fmtDate(new Date(state.profile.smsSyncedAt), { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })) : ''}</p>
+      <div class="btns"><button class="btn" data-act="sms-sync">مزامنة الآن</button><button class="btn ghost" data-act="sms-resync">إعادة فحص آخر 3 أشهر</button></div>`
+      : `<p class="small muted" style="margin:0">اسمح للتطبيق بقراءة الرسائل ليسجّل عمليات البنك تلقائياً. الرسائل تُقرأ على جوالك فقط ولا تُرسل لأي مكان.</p>
+      <button class="btn" data-act="sms-enable" style="justify-self:start">تفعيل القراءة التلقائية</button>`}
+    </div>` : `
     <details class="card" id="iphone"><summary>استخدامه على الآيفون</summary>
       <p class="small" style="margin-top:0">آبل لا تسمح لأي تطبيق بقراءة الرسائل تلقائياً، لذلك نستخدم طريقة النسخ واللصق. يستغرق ذلك ثوانٍ لكل رسالة:</p>
       <ol class="steps">
@@ -1226,12 +1279,14 @@ Date: ${iso(new Date()).slice(0, 10)} 08:05`;
       </ol>
     </details>
     <details class="card"><summary>استخدامه على الأندرويد</summary>
+      <p class="small" style="margin-top:0"><b>الأفضل:</b> حمّل تطبيق الأندرويد، فهو يقرأ رسائل البنك تلقائياً: <a href="https://aboubakrzakaria91-cloud.github.io/mizaniyati/mizaniyati.apk" style="color:var(--accent);font-weight:600">تحميل ميزانيتي.apk</a></p>
+      <p class="small muted">أو استخدمه من المتصفح:</p>
       <ol class="steps">
         <li><b>ثبّت التطبيق:</b> افتح الرابط في متصفح <b>Chrome</b> ← القائمة ⋮ ← «تثبيت التطبيق» أو «إضافة إلى الشاشة الرئيسية».</li>
         <li><b>عند وصول رسالة البنك:</b> اضغط مطولاً على الرسالة ← «مشاركة» ← اختر <b>ميزانيتي</b>.</li>
         <li>يفتح التطبيق والرسالة مقروءة وجاهزة ← راجعها واضغط «حفظ».</li>
       </ol>
-    </details>
+    </details>`}
     <details class="card"><summary>قواعد التصنيف المحفوظة (${fmt(rules.length, 0)})</summary>
       <p class="small muted" style="margin-top:0">عندما تغيّر فئة عملية وتختار «تذكّر»، يحفظ التطبيق القاعدة ويطبّقها على رسائل هذا المتجر مستقبلاً.</p>
       ${rules.length ? rules.map(([k, v]) => `<div class="rule"><span>${esc(k)} ← ${CAT[v]?.icon || ''} ${esc(CAT[v]?.name || v)}</span><button class="btn ghost" style="padding:4px 10px" data-delrule="${esc(k)}">حذف</button></div>`).join('') : '<div class="small muted">لا توجد قواعد بعد</div>'}
@@ -1348,6 +1403,10 @@ Date: ${iso(new Date()).slice(0, 10)} 08:05`;
       try { await dl.save({ filename, data: text }); } catch (e) { if (e && e.code !== 'declined') toast('تعذّر حفظ الملف'); }
       return;
     }
+    if (Native && Native.saveFile) {
+      try { toast(Native.saveFile(filename, text)); } catch (e) { toast('تعذّر حفظ الملف'); }
+      return;
+    }
     const blob = new Blob([text], { type });
     try {
       const file = new File([blob], filename, { type });
@@ -1420,6 +1479,9 @@ Date: ${iso(new Date()).slice(0, 10)} 08:05`;
       case 'del-yes': deleteTxn(state.editing.t.id); state.editing = null; toast('تم حذف العملية'); render(); break;
       case 'export': exportCsv(); break;
       case 'backup': exportBackup(); break;
+      case 'sms-enable': if (Native) Native.requestSmsPermission(); break;
+      case 'sms-sync': { const n = syncSms(); if (!n) toast('لا توجد رسائل بنك جديدة'); break; }
+      case 'sms-resync': { const n = syncSms(periodAt(-2).start.getTime()); if (!n) toast('كل رسائل آخر 3 أشهر مسجلة مسبقاً'); break; }
       case 'clear': state.confirmClear = true; render(); break;
       case 'clear-no': state.confirmClear = false; render(); break;
       case 'clear-yes': clearAll(); break;
@@ -1460,6 +1522,7 @@ Date: ${iso(new Date()).slice(0, 10)} 08:05`;
   state.mode = 'connecting';
   render();
   Store.init().then(() => {
+    if (nativeSmsOn()) syncSms();
     if (!sharedText) return;
     state.tab = 'add'; state.addMode = 'sms'; render();
     $('#sms-in').value = sharedText; doParse();

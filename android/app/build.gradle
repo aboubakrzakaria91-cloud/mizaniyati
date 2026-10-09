@@ -1,0 +1,37 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'sa.mizaniyati.app'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'sa.mizaniyati.app'
+        minSdk 24
+        // 34 keeps the classic status bar; 35 would force edge-to-edge drawing under it.
+        targetSdk 34
+        versionCode 1
+        versionName '1.0'
+    }
+
+    signingConfigs {
+        release {
+            // Fixed key so each new APK installs over the old one and keeps the user's data.
+            storeFile file('../keystore/mizaniyati.jks')
+            storePassword 'mizaniyati'
+            keyAlias 'mizaniyati'
+            keyPassword 'mizaniyati'
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.release
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}

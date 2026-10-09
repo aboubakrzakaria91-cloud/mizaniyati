@@ -77,3 +77,7 @@ open('docs/index.html', 'w', encoding='utf-8').write(pre + head + '\n</head>\n<b
 PY
 cp pwa/manifest.webmanifest pwa/sw.js docs/
 cp pwa/icons/*.png docs/icons/ 2>/dev/null || true
+
+# Android app (APK) bundles the same page; no service worker inside the app.
+mkdir -p android/app/src/main/assets
+sed "/navigator.serviceWorker.register/d" docs/index.html > android/app/src/main/assets/index.html
