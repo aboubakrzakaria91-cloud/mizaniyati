@@ -217,3 +217,4 @@ nav.tabs .add span.plus svg { stroke: var(--accent-ink); }
   .stats { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+.setrow.plan { grid-template-columns: 52px minmax(0, 1fr) 110px; }

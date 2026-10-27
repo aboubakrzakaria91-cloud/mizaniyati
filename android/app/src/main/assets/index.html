@@ -235,6 +235,7 @@ nav.tabs .add span.plus svg { stroke: var(--accent-ink); }
   .stats { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+.setrow.plan { grid-template-columns: 52px minmax(0, 1fr) 110px; }
 </style>
 </head>
 <body>
@@ -605,6 +606,9 @@ function splitMessages(raw) {
   return parts.map((p) => p.trim()).filter(Boolean);
 }
 
+// بنود الميزانية من ملف الإكسيل (ورقة OCT-26). المفتاح k يطابق عمود «مفتاح الربط» في الإكسيل.
+const PLAN_INCOME = 16650;
+const PLAN_LINES = [{"k": "السعودية - الايجار","s": "السعودية","n": "الايجار","t": "Needs","p": 0},{"k": "السعودية - الكهرباء","s": "السعودية","n": "الكهرباء","t": "Needs","p": 750},{"k": "السعودية - المقاضي الشهرية","s": "السعودية","n": "المقاضي الشهرية","t": "Needs","p": 3100},{"k": "السعودية - مصاريف العمرة","s": "السعودية","n": "مصاريف العمرة","t": "Needs","p": 1700},{"k": "السعودية - ستائر","s": "السعودية","n": "ستائر","t": "Wants","p": 0},{"k": "السعودية - مصاريف انتقال الي البيت","s": "السعودية","n": "مصاريف انتقال الي البيت","t": "Wants","p": 0},{"k": "السعودية - مصاريف عفش جديد","s": "السعودية","n": "مصاريف عفش جديد","t": "Wants","p": 0},{"k": "السعودية - فاتوره المياه","s": "السعودية","n": "فاتوره المياه","t": "Needs","p": 0},{"k": "السعودية - صيانة للبيت","s": "السعودية","n": "صيانة للبيت","t": "Needs","p": 100},{"k": "مصر - فلوس سارة للاغراض الاخري","s": "مصر","n": "فلوس سارة للاغراض الاخري","t": "Needs","p": 0},{"k": "مصر - فلوس تذكره","s": "مصر","n": "فلوس تذكره","t": "Needs","p": 0},{"k": "مصر - مصروف البيت ( مصر )","s": "مصر","n": "مصروف البيت ( مصر )","t": "Needs","p": 0},{"k": "مصر - سلسبيل هدي","s": "مصر","n": "سلسبيل هدي","t": "Wants","p": 44.44},{"k": "مصر - فلوس الصغيرين استثمار","s": "مصر","n": "فلوس الصغيرين استثمار","t": "Wants","p": 88.89},{"k": "مصر - فلوس مريم استثمار","s": "مصر","n": "فلوس مريم استثمار","t": "Wants","p": 74.07},{"k": "مصر - نقوط ل حبيبة و شيماء","s": "مصر","n": "نقوط ل حبيبة و شيماء","t": "Wants","p": 111.11},{"k": "مصر - فلوس اصلاحات","s": "مصر","n": "فلوس اصلاحات","t": "Wants","p": 44.44},{"k": "مصر - اشتراك شات جي بي تي","s": "مصر","n": "اشتراك شات جي بي تي","t": "Wants","p": 53.7},{"k": "مصر - هديا ارض اللواء انس باشا","s": "مصر","n": "هديا ارض اللواء انس باشا","t": "Wants","p": 0},{"k": "مصر - فلوس احمد سعد","s": "مصر","n": "فلوس احمد سعد","t": "Safe","p": 4000},{"k": "مصر - الجمعية ام سارة","s": "مصر","n": "الجمعية ام سارة","t": "Safe","p": 148.15},{"k": "مصر - الجمعية خاصة بمريم","s": "مصر","n": "الجمعية خاصة بمريم","t": "Safe","p": 888.89},{"k": "السيارة - بنزين","s": "السيارة","n": "بنزين","t": "Needs","p": 440},{"k": "السيارة - اشتراك الموقف","s": "السيارة","n": "اشتراك الموقف","t": "Needs","p": 150},{"k": "السيارة - قسط السيارة","s": "السيارة","n": "قسط السيارة","t": "Needs","p": 2090},{"k": "السيارة - زيت","s": "السيارة","n": "زيت","t": "Wants","p": 0},{"k": "السيارة - صيانة","s": "السيارة","n": "صيانة","t": "Wants","p": 0},{"k": "السيارة - غسيل","s": "السيارة","n": "غسيل","t": "Needs","p": 105},{"k": "سارة - مصروف جيب ( بدلات)","s": "سارة","n": "مصروف جيب ( بدلات)","t": "Wants","p": 0},{"k": "سارة - مصايف التاشيره","s": "سارة","n": "مصايف التاشيره","t": "Needs","p": 0},{"k": "سارة - مقاضي شخصية لسارة ( بدل الزيت)","s": "سارة","n": "مقاضي شخصية لسارة ( بدل الزيت)","t": "Wants","p": 0},{"k": "سارة - فاتورة جوال","s": "سارة","n": "فاتورة جوال","t": "Wants","p": 0},{"k": "سارة - علاج","s": "سارة","n": "علاج","t": "Needs","p": 0},{"k": "سارة - مصاريف شخصية اخري","s": "سارة","n": "مصاريف شخصية اخري","t": "Wants","p": 0},{"k": "سارة - ملابس","s": "سارة","n": "ملابس","t": "Wants","p": 0},{"k": "سارة - احذية","s": "سارة","n": "احذية","t": "Wants","p": 0},{"k": "بكر - مصروف جيب","s": "بكر","n": "مصروف جيب","t": "Needs","p": 0},{"k": "بكر - فاتورة جوال","s": "بكر","n": "فاتورة جوال","t": "Needs","p": 900},{"k": "بكر - علاج","s": "بكر","n": "علاج","t": "Needs","p": 0},{"k": "بكر - مصاريف تجديد الرخصة","s": "بكر","n": "مصاريف تجديد الرخصة","t": "Wants","p": 0},{"k": "بكر - مصاريف شخصية في العمل","s": "بكر","n": "مصاريف شخصية في العمل","t": "Needs","p": 0},{"k": "بكر - ملابس","s": "بكر","n": "ملابس","t": "Wants","p": 0},{"k": "بكر - احذية","s": "بكر","n": "احذية","t": "Wants","p": 0},{"k": "الترفيه - مطاعم","s": "الترفيه","n": "مطاعم","t": "Wants","p": 0},{"k": "الترفيه - تمشيه / ملاهي","s": "الترفيه","n": "تمشيه / ملاهي","t": "Wants","p": 0},{"k": "الترفيه - كوفي شوب","s": "الترفيه","n": "كوفي شوب","t": "Wants","p": 0},{"k": "الترفيه - حلويات","s": "الترفيه","n": "حلويات","t": "Wants","p": 0},{"k": "اشتراكات - المواقع","s": "اشتراكات","n": "المواقع","t": "Needs","p": 215.81},{"k": "اشتراكات - Preplex","s": "اشتراكات","n": "Preplex","t": "Wants","p": 0},{"k": "أقساط - تابي","s": "أقساط","n": "تابي","t": "Needs","p": 449},{"k": "أقساط - عمولة البنك المستقطعة","s": "أقساط","n": "عمولة البنك المستقطعة","t": "Needs","p": 0},{"k": "سداد الديون - الفيزا","s": "سداد الديون","n": "الفيزا","t": "Safe","p": 0},{"k": "سداد الديون - رد مبالغ الفيزا","s": "سداد الديون","n": "رد مبالغ الفيزا","t": "Safe","p": 0},{"k": "سداد الديون - مخالفات مرورية","s": "سداد الديون","n": "مخالفات مرورية","t": "Needs","p": 0},{"k": "سداد الديون - رد ديون","s": "سداد الديون","n": "رد ديون","t": "Safe","p": 0},{"k": "سداد الديون - خيري","s": "سداد الديون","n": "خيري","t": "Safe","p": 0},{"k": "الاستثمارات - التعليم","s": "الاستثمارات","n": "التعليم","t": "Safe","p": 0},{"k": "الاستثمارات - الأسهم","s": "الاستثمارات","n": "الأسهم","t": "Safe","p": 0}];
 </script>
 <script>
 // ===== ميزانيتي — التطبيق =====
@@ -783,6 +787,54 @@ function splitMessages(raw) {
   }
   function setProfile(patch) { state.profile = { ...state.profile, ...patch }; Store.saveProfile(); if (state.mode !== 'cloud') Store.saveLocal(); }
   function knownHashes() { return new Set(realTxns().map((t) => t.hash).filter(Boolean)); }
+
+  // ---------- budget lines from the Excel plan (sheet OCT-26, «مفتاح الربط» column) ----------
+  const LINE = Object.fromEntries(PLAN_LINES.map((l) => [l.k, l]));
+  const SECTIONS = [...new Set(PLAN_LINES.map((l) => l.s))];
+  const planOf = (k) => { const o = (state.profile.plan || {})[k]; return o != null ? o : LINE[k].p; };
+  const planIncome = () => state.profile.planIncome ?? PLAN_INCOME;
+  // Same rules used to fill the Excel sheet; '' means the user picks the line.
+  function lineFor(t) {
+    if (t.type !== 'expense') return '';
+    const m = (t.merchant || '').toLowerCase(), note = t.note || '', cat = t.cat, amt = t.amount;
+    const nm = normalizeMerchant(t.merchant || ''), lr = state.profile.lineRules || {};
+    if (nm && lr[nm] !== undefined && (lr[nm] === '' || LINE[lr[nm]])) return lr[nm];
+    if (/تذكرة طيران|تذكره طيران|تذاكر/.test(note)) return 'مصر - فلوس تذكره';
+    if (/احمد سعد|أحمد سعد/.test(note)) return 'مصر - فلوس احمد سعد';
+    if (/ديون|دين/.test(note)) return 'سداد الديون - رد ديون';
+    if (/قسط السيار[ةه]/.test(note) || /\bjebi\b/.test(m)) return 'السيارة - قسط السيارة';
+    if (/صيان[ةه]/.test(m + ' ' + note) && /باب|بيت|منزل|شق[ةه]/.test(m + ' ' + note)) return 'السعودية - صيانة للبيت';
+    if (/tabby|تابي/.test(m)) return 'أقساط - تابي';
+    if (/perplexity/.test(m)) return 'اشتراكات - Preplex';
+    if (cat === 'subscriptions') return 'اشتراكات - المواقع';
+    if (/الكهرباء|كهرباء|\bsec\b/.test(m)) return 'السعودية - الكهرباء';
+    if (/المياه|مياه|\bnwc\b/.test(m)) return 'السعودية - فاتوره المياه';
+    if (/^stc$|^stc\b/.test(m.trim()) && cat === 'bills') return 'بكر - فاتورة جوال';
+    if (cat === 'fuel') return 'السيارة - بنزين';
+    if (/باركن|parking|مواقف/.test(m)) return 'السيارة - اشتراك الموقف';
+    if (/بلايستيشن|playstation/.test(m)) return 'الترفيه - تمشيه / ملاهي';
+    if (/baskin|حلويات|حلوى/.test(m)) return 'الترفيه - حلويات';
+    if (cat === 'coffee') return 'الترفيه - كوفي شوب';
+    if (cat === 'restaurants') return 'الترفيه - مطاعم';
+    if (cat === 'groceries' || /\bmeed\b/.test(m)) return 'السعودية - المقاضي الشهرية';
+    if (cat === 'health') return 'بكر - علاج';
+    if ((cat === 'transport' || cat === 'personal') && amt < 100) return 'بكر - مصروف جيب';
+    if (cat === 'other' && amt < 20) return 'بكر - مصروف جيب';
+    if (cat === 'car' && amt < 50) return 'السيارة - غسيل';
+    if (cat === 'entertainment') return 'الترفيه - تمشيه / ملاهي';
+    return '';
+  }
+  const lineOf = (t) => (t.line !== undefined && (t.line === '' || LINE[t.line]) ? t.line : lineFor(t));
+  const lineSelect = (sel, attrs) => `<select ${attrs}><option value="">— بدون بند —</option>${SECTIONS.map((sec) => `<optgroup label="${esc(sec)}">${PLAN_LINES.filter((l) => l.s === sec).map((l) => `<option value="${esc(l.k)}" ${l.k === sel ? 'selected' : ''}>${esc(l.n)}</option>`).join('')}</optgroup>`).join('')}</select>`;
+  function planActuals(list) {
+    const act = {}; let unassigned = 0;
+    for (const t of list) {
+      const k = lineOf(t);
+      if (k) act[k] = (act[k] || 0) + (t.type === 'income' ? -t.amount : t.amount);
+      else if (t.type === 'expense') unassigned += t.amount;
+    }
+    return { act, unassigned };
+  }
 
   // ---------- Android app (APK): reads bank SMS from the inbox through a native bridge ----------
   const Native = window.MizaniyatiAndroid || null;
@@ -1003,7 +1055,7 @@ function splitMessages(raw) {
     const p = periodAt(state.offset);
     const f = state.txFilter;
     const q = normalizeDigits(f.q).toLowerCase().trim();
-    let list = inPeriod(p).filter((t) => (!f.type || t.type === f.type) && (!f.cat || t.cat === f.cat) &&
+    let list = inPeriod(p).filter((t) => (!f.type || t.type === f.type) && (!f.cat || (f.cat === '__noline' ? t.type === 'expense' && !lineOf(t) : t.cat === f.cat)) &&
       (!q || (t.merchant || '').toLowerCase().includes(q) || (t.note || '').toLowerCase().includes(q) || (CAT[t.cat]?.name || '').includes(q) || String(t.amount).includes(q)));
     list = list.sort((a, b) => (a.date < b.date ? 1 : -1));
     const days = {};
@@ -1020,7 +1072,7 @@ function splitMessages(raw) {
           <button class="seg" data-ftype="expense" aria-pressed="${f.type === 'expense'}">مصروف</button>
           <button class="seg" data-ftype="income" aria-pressed="${f.type === 'income'}">دخل</button>
         </div>
-        <select id="tx-cat" aria-label="الفئة"><option value="">كل الفئات</option>${catOpts}</select>
+        <select id="tx-cat" aria-label="الفئة"><option value="">كل الفئات</option><option value="__noline" ${f.cat === '__noline' ? 'selected' : ''}>⚠ بدون بند في الميزانية</option>${catOpts}</select>
       </div>
     </div>
     <div class="card">
@@ -1144,6 +1196,7 @@ Date: ${iso(new Date()).slice(0, 10)} 08:05`;
       <div class="legend"><span><i></i>صرفك الفعلي</span><span><i class="dash"></i>الصرف المثالي حتى ${moneyTxt(state.profile.budget || 0, 0)}</span></div></div>
     <div class="card"><h2>المصروف في آخر ٦ فترات</h2><div class="chart" id="ch-months"></div>
       <div class="legend"><span><i class="bar"></i>ضمن الميزانية</span><span><i class="bad"></i>فوق الميزانية</span><span><i class="dash"></i>الميزانية</span></div></div>
+    ${planCard(list)}
     <div class="card"><h2>المصروف حسب الفئة</h2>${catBars(byCat, exp, 0, prev.byCat)}</div>
     <div class="card"><h2>أكثر الجهات صرفاً</h2>
       ${top.length ? `<div class="tbl"><table><thead><tr><th>الجهة</th><th class="n">عدد</th><th class="n">المبلغ</th></tr></thead><tbody>
@@ -1151,6 +1204,32 @@ Date: ${iso(new Date()).slice(0, 10)} 08:05`;
     </div>`;
     drawCumulative($('#ch-cum'), p, list);
     drawMonths($('#ch-months'));
+  }
+
+  function planCard(list) {
+    const { act, unassigned } = planActuals(list);
+    const inc = planIncome();
+    let totP = 0, totA = 0;
+    const secs = SECTIONS.map((sec) => {
+      const ls = PLAN_LINES.filter((l) => l.s === sec).map((l) => ({ l, p: planOf(l.k), a: act[l.k] || 0 })).filter((x) => x.p || x.a);
+      const p = ls.reduce((a, x) => a + x.p, 0), a = ls.reduce((s2, x) => s2 + x.a, 0);
+      totP += p; totA += a;
+      return { sec, ls, p, a };
+    }).filter((x) => x.ls.length);
+    const bar = (a, p) => { const r = p ? a / p : a ? 2 : 0; return `<span class="bar"><i class="${r > 1 ? 'bad' : r >= 0.8 ? 'warn' : ''}" style="width:${Math.min(100, r * 100).toFixed(1)}%"></i></span>`; };
+    const rem = (p, a) => `<span class="${p - a < 0 ? 'delta-up' : ''}">${fmt(p - a, 0)}</span>`;
+    return `<div class="card"><h2>الخطة مقابل الفعلي <span class="small muted" style="font-weight:400">ملف الإكسيل</span></h2>
+      <div class="kv" style="margin-bottom:10px">
+        <div><div class="small muted">الدخل المخطط</div><div class="num" style="font-size:17px">${moneyTxt(inc, 0)}</div></div>
+        <div><div class="small muted">المخطط للصرف</div><div class="num" style="font-size:17px">${moneyTxt(totP, 0)}</div></div>
+        <div><div class="small muted">المدفوع فعلياً (موزع)</div><div class="num" style="font-size:17px">${moneyTxt(totA, 0)}</div></div>
+        <div><div class="small muted">المتبقي من الدخل</div><div class="num" style="font-size:17px;color:${inc - totA - unassigned < 0 ? 'var(--bad)' : 'var(--good)'}">${moneyTxt(inc - totA - unassigned, 0)}</div></div>
+      </div>
+      ${unassigned ? `<div class="banner warn small" style="margin-bottom:10px"><span>⚠ <b>${moneyTxt(unassigned, 0)}</b> مصروفات بدون بند في الميزانية.</span><button class="btn ghost" data-act="show-noline" style="padding:6px 12px">عرضها وتوزيعها</button></div>` : ''}
+      <div class="tbl"><table><thead><tr><th>البند</th><th class="n">المخطط</th><th class="n">الفعلي</th><th class="n">المتبقي</th></tr></thead><tbody>
+      ${secs.map((x) => `<tr style="background:var(--surface-2)"><td><b>${esc(x.sec)}</b></td><td class="n"><b>${fmt(x.p, 0)}</b></td><td class="n"><b>${fmt(x.a, 0)}</b></td><td class="n"><b>${rem(x.p, x.a)}</b></td></tr>
+        ${x.ls.map((y) => `<tr><td style="padding-inline-start:14px">${esc(y.l.n)}<div class="catrow" style="display:block">${bar(y.a, y.p)}</div></td><td class="n">${fmt(y.p, 0)}</td><td class="n">${fmt(y.a, 0)}</td><td class="n">${rem(y.p, y.a)}</td></tr>`).join('')}`).join('')}
+      </tbody></table></div></div>`;
   }
 
   function svgEl(w, h, inner) { return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img">${inner}</svg><div class="tip" hidden></div>`; }
@@ -1256,6 +1335,12 @@ Date: ${iso(new Date()).slice(0, 10)} 08:05`;
         <button class="seg" data-digits="latn" aria-pressed="${pr.digits !== 'arab'}">123</button>
         <button class="seg" data-digits="arab" aria-pressed="${pr.digits === 'arab'}">١٢٣</button></div></div>
     </div>
+    <details class="card"><summary>خطة الإكسيل (بنود الميزانية)</summary>
+      <p class="small muted" style="margin-top:0">نفس بنود ورقة OCT-26. كل عملية تُربط ببند، وعند التصدير يظهر البند في عمود «البند في الميزانية» فتلصقه في ورقة الحركات ويتحدث الإكسيل تلقائياً.</p>
+      <div class="field" style="margin-bottom:10px"><label for="s-income">الدخل الشهري المخطط (ر.س)</label><input id="s-income" type="text" inputmode="decimal" value="${esc(planIncome())}"></div>
+      <button class="btn ghost" data-act="plan-budget" style="margin-bottom:12px">اجعل ميزانية الشهر = إجمالي الخطة (${fmt(PLAN_LINES.reduce((a, l) => a + planOf(l.k), 0), 0)} ر.س)</button>
+      ${SECTIONS.map((sec) => `<div class="lbl" style="margin:10px 0 6px;font-weight:600">${esc(sec)}</div><div class="set-list">${PLAN_LINES.filter((l) => l.s === sec).map((l, i) => `<div class="setrow plan"><span class="small muted">${esc(l.t)}</span><label for="pl-${esc(sec)}-${i}">${esc(l.n)}</label><input id="pl-${esc(sec)}-${i}" type="text" inputmode="decimal" data-plan="${esc(l.k)}" value="${planOf(l.k) ? esc(Math.round(planOf(l.k) * 100) / 100) : ''}" placeholder="—"></div>`).join('')}</div>`).join('')}
+    </details>
     <details class="card"><summary>ميزانية لكل فئة (اختياري)</summary>
       <p class="small muted" style="margin-top:0">حدد سقفاً لأي فئة وسيظهر لك تنبيه عند الوصول إلى 80٪ منه. اترك الخانة فارغة لإلغائه.</p>
       <div class="set-list">${EXP_CATS.map((c) => `<div class="setrow"><span aria-hidden="true">${c.icon}</span><label for="cb-${c.id}">${esc(c.name)}</label><input id="cb-${c.id}" type="text" inputmode="decimal" data-cb="${c.id}" placeholder="—" value="${cb[c.id] ? esc(cb[c.id]) : ''}"></div>`).join('')}</div>
@@ -1315,13 +1400,14 @@ Date: ${iso(new Date()).slice(0, 10)} 08:05`;
         <div class="field"><label for="e-amount">المبلغ (ر.س)</label><input id="e-amount" type="text" inputmode="decimal" value="${esc(t.amount)}"></div>
         <div class="field"><label for="e-cat">الفئة</label>${catSelect(t.type, t.cat, 'id="e-cat"')}</div>
       </div>
+      <div class="field"><label for="e-line">البند في الميزانية (ملف الإكسيل)</label>${lineSelect(lineOf(t), 'id="e-line"')}</div>
       <div class="field"><label for="e-merchant">المتجر أو الوصف</label><input id="e-merchant" type="text" dir="auto" value="${esc(t.merchant)}"></div>
       <div class="row2">
         <div class="field"><label for="e-date">التاريخ والوقت</label><input id="e-date" type="datetime-local" value="${esc(t.date)}"></div>
         <div class="field"><label for="e-method">طريقة الدفع</label>${methodSelect(t.method, 'id="e-method"')}</div>
       </div>
       <div class="field"><label for="e-note">ملاحظة</label><input id="e-note" type="text" dir="auto" value="${esc(t.note || '')}"></div>
-      ${t.merchant ? `<label class="check"><input type="checkbox" id="e-remember"> تذكّر هذه الفئة لكل عمليات «${esc(t.merchant)}»</label>` : ''}
+      ${t.merchant ? `<label class="check"><input type="checkbox" id="e-remember"> تذكّر الفئة والبند لكل عمليات «${esc(t.merchant)}»</label>` : ''}
       ${t.raw ? `<details><summary class="small muted">نص الرسالة الأصلية</summary><div class="small muted" dir="auto" style="white-space:pre-line">${esc(t.raw)}</div></details>` : ''}
       ${t.sample ? '' : `<div class="btns"><button class="btn" data-act="save-edit" style="flex:1">حفظ التعديل</button>
         ${e.confirmDel ? '<button class="btn danger" data-act="del-yes">تأكيد الحذف</button>' : '<button class="btn ghost" data-act="del" style="color:var(--bad)">حذف</button>'}</div>`}
@@ -1379,17 +1465,20 @@ Date: ${iso(new Date()).slice(0, 10)} 08:05`;
     const e = state.editing, t = e.t;
     const amount = toNum($('#e-amount').value);
     if (!(amount > 0)) { toast('المبلغ غير صحيح'); return; }
-    const patch = { type: t.type, amount: Math.round(amount * 100) / 100, cat: $('#e-cat').value, merchant: $('#e-merchant').value.trim(), date: $('#e-date').value || t.date, method: $('#e-method').value, note: $('#e-note').value.trim() };
+    const patch = { type: t.type, amount: Math.round(amount * 100) / 100, cat: $('#e-cat').value, merchant: $('#e-merchant').value.trim(), date: $('#e-date').value || t.date, method: $('#e-method').value, note: $('#e-note').value.trim(), line: $('#e-line').value };
     if ($('#e-remember') && $('#e-remember').checked && patch.merchant) {
-      setProfile({ rules: { ...(state.profile.rules || {}), [normalizeMerchant(patch.merchant)]: patch.cat } });
+      const nm = normalizeMerchant(patch.merchant);
+      // Generic names (a bare «حوالة») would capture every transfer, so only the category is remembered for them.
+      const generic = /^(حوال[ةه]|تحويل|transfer|تسوق|شراء|سحب)$/.test(nm);
+      setProfile({ rules: { ...(state.profile.rules || {}), [nm]: patch.cat }, ...(generic ? {} : { lineRules: { ...(state.profile.lineRules || {}), [nm]: patch.line } }) });
     }
     updateTxn(t.id, patch);
     state.editing = null; toast('تم الحفظ'); render();
   }
 
   async function exportCsv() {
-    const rows = [['التاريخ', 'النوع', 'المبلغ', 'الفئة', 'الجهة', 'طريقة الدفع', 'المصدر', 'ملاحظة']];
-    realTxns().sort((a, b) => (a.date < b.date ? -1 : 1)).forEach((t) => rows.push([t.date.replace('T', ' '), t.type === 'income' ? 'دخل' : 'مصروف', t.amount, CAT[t.cat]?.name || t.cat, t.merchant, t.method, t.source === 'sms' ? 'رسالة' : 'يدوي', t.note || '']));
+    const rows = [['التاريخ', 'النوع', 'المبلغ', 'الفئة', 'الجهة', 'طريقة الدفع', 'المصدر', 'ملاحظة', 'البند في الميزانية']];
+    realTxns().sort((a, b) => (a.date < b.date ? -1 : 1)).forEach((t) => rows.push([t.date.replace('T', ' '), t.type === 'income' ? 'دخل' : 'مصروف', t.amount, CAT[t.cat]?.name || t.cat, t.merchant, t.method, t.source === 'sms' ? 'رسالة' : 'يدوي', t.note || '', lineOf(t)]));
     const csv = '﻿' + rows.map((r) => r.map((v) => '"' + String(v ?? '').replace(/"/g, '""') + '"').join(',')).join('\r\n');
     await offerFile('mizaniyati-' + iso(new Date()).slice(0, 10) + '.csv', csv, 'text/csv');
   }
@@ -1460,7 +1549,7 @@ Date: ${iso(new Date()).slice(0, 10)} 08:05`;
     if (d.digits) { setProfile({ digits: d.digits }); render(); return; }
     if (d.delrule) { const r = { ...(state.profile.rules || {}) }; delete r[d.delrule]; setProfile({ rules: r }); render(); return; }
     if (d.etype) {
-      const e = state.editing; e.t = { ...e.t, amount: $('#e-amount').value, merchant: $('#e-merchant').value, date: $('#e-date').value, method: $('#e-method').value, note: $('#e-note').value, type: d.etype };
+      const e = state.editing; e.t = { ...e.t, amount: $('#e-amount').value, merchant: $('#e-merchant').value, date: $('#e-date').value, method: $('#e-method').value, note: $('#e-note').value, line: $('#e-line').value, type: d.etype };
       e.t.cat = d.etype === 'income' ? (CAT[e.t.cat]?.kind === 'income' ? e.t.cat : 'income_other') : (CAT[e.t.cat]?.kind === 'expense' ? e.t.cat : 'other');
       renderSheet(); return;
     }
@@ -1478,6 +1567,8 @@ Date: ${iso(new Date()).slice(0, 10)} 08:05`;
       case 'del-yes': deleteTxn(state.editing.t.id); state.editing = null; toast('تم حذف العملية'); render(); break;
       case 'export': exportCsv(); break;
       case 'backup': exportBackup(); break;
+      case 'show-noline': state.tab = 'txns'; state.txFilter = { q: '', type: '', cat: '__noline' }; render(); window.scrollTo(0, 0); break;
+      case 'plan-budget': setProfile({ budget: Math.round(PLAN_LINES.reduce((a, l) => a + planOf(l.k), 0)) }); toast('تم تحديث ميزانية الشهر'); render(); break;
       case 'sms-enable': if (Native) Native.requestSmsPermission(); break;
       case 'sms-sync': { const n = syncSms(); if (!n) toast('لا توجد رسائل بنك جديدة'); break; }
       case 'sms-resync': { const n = syncSms(periodAt(-2).start.getTime()); if (!n) toast('كل رسائل آخر 3 أشهر مسجلة مسبقاً'); break; }
@@ -1499,6 +1590,12 @@ Date: ${iso(new Date()).slice(0, 10)} 08:05`;
     if (el.dataset.pinc !== undefined) { const r = state.parsed[+el.dataset.pinc]; r.include = el.checked; render(); return; }
     if (el.dataset.pf) { readParsedField(el); return; }
     if (el.id === 's-budget') { const n = toNum(el.value); if (n > 0) { setProfile({ budget: Math.round(n) }); toast('تم تحديث الميزانية'); } else el.value = state.profile.budget; return; }
+    if (el.id === 's-income') { const n = toNum(el.value); if (n > 0) { setProfile({ planIncome: Math.round(n * 100) / 100 }); toast('تم تحديث الدخل المخطط'); } return; }
+    if (el.dataset.plan) {
+      const n = toNum(el.value), pl = { ...(state.profile.plan || {}) };
+      pl[el.dataset.plan] = n >= 0 ? Math.round(n * 100) / 100 : 0;
+      setProfile({ plan: pl }); return;
+    }
     if (el.id === 's-start') { setProfile({ startDay: +el.value }); state.offset = 0; sampleCache = null; toast('تم تحديث بداية الشهر'); return; }
     if (el.dataset.cb) {
       const n = toNum(el.value); const cb = { ...(state.profile.catBudgets || {}) };

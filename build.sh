@@ -45,6 +45,7 @@ cat <<'MID'
 <script>
 MID
 sed '/^if (typeof module/,$d' src/parser.js
+cat src/plan.js
 cat <<'MID2'
 </script>
 <script>
