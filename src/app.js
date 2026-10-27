@@ -143,7 +143,8 @@
   }
   function addTxns(list) {
     const touched = new Set();
-    for (const t of list) {
+    for (const t0 of list) {
+      const t = autoBudgetMonth(t0);
       const k = monthKey(t.date);
       (state.months[k] = state.months[k] || []).push(t);
       touched.add(k);
@@ -277,7 +278,23 @@
     const last = new Date(p.end.getTime() - 86400000);
     return fmtDate(p.start, { day: 'numeric', month: 'short' }) + ' – ' + fmtDate(last, { day: 'numeric', month: 'short', year: 'numeric' });
   }
-  const inPeriod = (p) => allTxns().filter((t) => t.date >= p.s && t.date < p.e);
+  // A transaction counts in its date's period unless it carries a budget month (bm = 'YYYY-MM' of that period's start).
+  const periodKey = (p) => p.s.slice(0, 7);
+  const inPeriod = (p) => { const k = periodKey(p); return allTxns().filter((t) => (t.bm ? t.bm === k : t.date >= p.s && t.date < p.e)); };
+  function periodOfDate(isoStr) {
+    const S = startDay(), d = parseIso(isoStr);
+    let y = d.getFullYear(), m = d.getMonth();
+    if (d.getDate() < S) m -= 1;
+    const start = new Date(y, m, S), end = new Date(y, m + 1, S);
+    return { start, end, s: iso(start), e: iso(end), days: Math.round((end - start) / 86400000) };
+  }
+  // Salary that lands in the last days of a period belongs to the next one (it pays for next month).
+  function autoBudgetMonth(t) {
+    if (t.bm !== undefined || t.type !== 'income' || t.cat !== 'salary' || state.profile.earlySalary === false) return t;
+    const p = periodOfDate(t.date);
+    const daysLeft = (p.end - parseIso(t.date)) / 86400000;
+    return daysLeft <= (state.profile.earlySalaryDays || 7) ? { ...t, bm: iso(p.end).slice(0, 7) } : t;
+  }
   function sums(list) {
     let exp = 0, inc = 0; const byCat = {};
     for (const t of list) {
@@ -344,7 +361,7 @@
     return `<div class="period">
       <button class="iconbtn" data-act="prev" aria-label="الفترة السابقة">›</button>
       <div class="label">${esc(periodLabel(p))}</div>
-      <button class="iconbtn" data-act="next" aria-label="الفترة التالية" ${state.offset >= 0 ? 'disabled' : ''}>‹</button>
+      <button class="iconbtn" data-act="next" aria-label="الفترة التالية" ${state.offset >= 3 ? 'disabled' : ''}>‹</button>
     </div>`;
   }
 
@@ -433,6 +450,7 @@
       <div class="stat"><div class="k">المسموح يومياً</div><div class="v">${el2.current ? fmt(daily, 0) : '—'} <small>${el2.current ? 'ر.س' : ''}</small></div><div class="h">${el2.current ? 'باقي ' + fmt(el2.daysLeft, 0) + ' يوم' : 'الفترة منتهية'}</div></div>
       <div class="stat"><div class="k">${el2.current ? 'المتوقع نهاية الفترة' : 'متوسط الصرف اليومي'}</div><div class="v" style="${el2.current && projected > budget ? 'color:var(--bad)' : ''}">${fmt(el2.current ? projected : exp / p.days, 0)} <small>ر.س</small></div><div class="h">${el2.current ? (projected > budget ? 'فوق الميزانية' : 'ضمن الميزانية') : 'على ' + fmt(p.days, 0) + ' يوم'}</div></div>
     </div>
+    ${isSample() ? '' : overCard(list)}
     <div class="card"><h2>أين ذهبت أموالك؟ <button class="link" data-go="reports">التقارير</button></h2>${catBars(byCat, exp, 6)}</div>
     <div class="card"><h2>آخر العمليات <button class="link" data-go="txns">عرض الكل</button></h2>
       ${recent.length ? recent.map(txRow).join('') : '<div class="empty">لا توجد عمليات بعد. اضغط ＋ لإضافة أول عملية أو لصق رسالة من البنك.</div>'}</div>`;
@@ -584,6 +602,7 @@ Date: ${iso(new Date()).slice(0, 10)} 08:05`;
     <div class="card"><h2>المصروف في آخر ٦ فترات</h2><div class="chart" id="ch-months"></div>
       <div class="legend"><span><i class="bar"></i>ضمن الميزانية</span><span><i class="bad"></i>فوق الميزانية</span><span><i class="dash"></i>الميزانية</span></div></div>
     ${planCard(list)}
+    ${typeCard(list)}
     <div class="card"><h2>المصروف حسب الفئة</h2>${catBars(byCat, exp, 0, prev.byCat)}</div>
     <div class="card"><h2>أكثر الجهات صرفاً</h2>
       ${top.length ? `<div class="tbl"><table><thead><tr><th>الجهة</th><th class="n">عدد</th><th class="n">المبلغ</th></tr></thead><tbody>
@@ -595,7 +614,9 @@ Date: ${iso(new Date()).slice(0, 10)} 08:05`;
 
   function planCard(list) {
     const { act, unassigned } = planActuals(list);
-    const inc = planIncome();
+    const realInc = list.filter((t) => t.type === 'income' && t.cat !== 'refund').reduce((a, t) => a + t.amount, 0);
+    const inc = realInc || planIncome();
+    const rate = state.profile.egpRate || PLAN_EGP_RATE;
     let totP = 0, totA = 0;
     const secs = SECTIONS.map((sec) => {
       const ls = PLAN_LINES.filter((l) => l.s === sec).map((l) => ({ l, p: planOf(l.k), a: act[l.k] || 0 })).filter((x) => x.p || x.a);
@@ -607,7 +628,7 @@ Date: ${iso(new Date()).slice(0, 10)} 08:05`;
     const rem = (p, a) => `<span class="${p - a < 0 ? 'delta-up' : ''}">${fmt(p - a, 0)}</span>`;
     return `<div class="card"><h2>الخطة مقابل الفعلي <span class="small muted" style="font-weight:400">ملف الإكسيل</span></h2>
       <div class="kv" style="margin-bottom:10px">
-        <div><div class="small muted">الدخل المخطط</div><div class="num" style="font-size:17px">${moneyTxt(inc, 0)}</div></div>
+        <div><div class="small muted">${realInc ? 'الدخل المستلم' : 'الدخل المخطط'}</div><div class="num" style="font-size:17px">${moneyTxt(inc, 0)}</div></div>
         <div><div class="small muted">المخطط للصرف</div><div class="num" style="font-size:17px">${moneyTxt(totP, 0)}</div></div>
         <div><div class="small muted">المدفوع فعلياً (موزع)</div><div class="num" style="font-size:17px">${moneyTxt(totA, 0)}</div></div>
         <div><div class="small muted">المتبقي من الدخل</div><div class="num" style="font-size:17px;color:${inc - totA - unassigned < 0 ? 'var(--bad)' : 'var(--good)'}">${moneyTxt(inc - totA - unassigned, 0)}</div></div>
@@ -615,8 +636,35 @@ Date: ${iso(new Date()).slice(0, 10)} 08:05`;
       ${unassigned ? `<div class="banner warn small" style="margin-bottom:10px"><span>⚠ <b>${moneyTxt(unassigned, 0)}</b> مصروفات بدون بند في الميزانية.</span><button class="btn ghost" data-act="show-noline" style="padding:6px 12px">عرضها وتوزيعها</button></div>` : ''}
       <div class="tbl"><table><thead><tr><th>البند</th><th class="n">المخطط</th><th class="n">الفعلي</th><th class="n">المتبقي</th></tr></thead><tbody>
       ${secs.map((x) => `<tr style="background:var(--surface-2)"><td><b>${esc(x.sec)}</b></td><td class="n"><b>${fmt(x.p, 0)}</b></td><td class="n"><b>${fmt(x.a, 0)}</b></td><td class="n"><b>${rem(x.p, x.a)}</b></td></tr>
-        ${x.ls.map((y) => `<tr><td style="padding-inline-start:14px">${esc(y.l.n)}<div class="catrow" style="display:block">${bar(y.a, y.p)}</div></td><td class="n">${fmt(y.p, 0)}</td><td class="n">${fmt(y.a, 0)}</td><td class="n">${rem(y.p, y.a)}</td></tr>`).join('')}`).join('')}
+        ${x.ls.map((y) => `<tr><td style="padding-inline-start:14px">${esc(y.l.n)}${x.sec === 'مصر' && (y.p || y.a) ? `<div class="small muted">≈ ${fmt(y.p * rate, 0)} ج.م مخطط${y.a ? ' · ' + fmt(y.a * rate, 0) + ' ج.م فعلي' : ''}</div>` : ''}<div class="catrow" style="display:block">${bar(y.a, y.p)}</div></td><td class="n">${fmt(y.p, 0)}</td><td class="n">${fmt(y.a, 0)}</td><td class="n">${rem(y.p, y.a)}</td></tr>`).join('')}`).join('')}
       </tbody></table></div></div>`;
+  }
+
+  const TYPE_AR = { Needs: 'ضروريات', Wants: 'كماليات', Goals: 'أهداف', Safe: 'ادخار وأمان' };
+  function typeCard(list) {
+    const { act, unassigned } = planActuals(list);
+    const realInc = list.filter((t) => t.type === 'income' && t.cat !== 'refund').reduce((a, t) => a + t.amount, 0);
+    const inc = realInc || planIncome();
+    const rows = Object.keys(PLAN_TARGETS).map((ty) => {
+      const ls = PLAN_LINES.filter((l) => l.t.toLowerCase() === ty.toLowerCase());
+      return { ty, target: PLAN_TARGETS[ty] * inc, p: ls.reduce((a, l) => a + planOf(l.k), 0), a: ls.reduce((a, l) => a + (act[l.k] || 0), 0) };
+    });
+    return `<div class="card"><h2>قاعدة التوزيع <span class="small muted" style="font-weight:400">60٪ ضروريات · 10٪ كماليات · 5٪ أهداف · 25٪ ادخار</span></h2>
+      <div class="tbl"><table><thead><tr><th>النوع</th><th class="n">المستهدف</th><th class="n">المخطط</th><th class="n">الفعلي</th></tr></thead><tbody>
+      ${rows.map((r) => `<tr><td>${TYPE_AR[r.ty]} <span class="small muted">${fmt(PLAN_TARGETS[r.ty] * 100, 0)}٪</span></td><td class="n">${fmt(r.target, 0)}</td><td class="n">${fmt(r.p, 0)}</td><td class="n"><span class="${(r.ty === 'Needs' || r.ty === 'Wants') && r.a > r.target ? 'delta-up' : (r.ty === 'Safe' || r.ty === 'Goals') && r.a < r.target ? 'delta-up' : 'delta-down'}">${fmt(r.a, 0)}</span> <span class="small muted">${inc ? fmt((r.a / inc) * 100, 0) + '٪' : ''}</span></td></tr>`).join('')}
+      ${unassigned ? `<tr><td class="muted">بدون بند</td><td></td><td></td><td class="n muted">${fmt(unassigned, 0)}</td></tr>` : ''}
+      </tbody></table></div>
+      <p class="small muted" style="margin:8px 0 0">الأحمر: كماليات أو ضروريات فوق المستهدف، أو ادخار وأهداف أقل منه. النسب من الدخل ${realInc ? 'المستلم' : 'المخطط'}.</p></div>`;
+  }
+
+  // Lines that went over plan, or were spent on without a plan — the first thing to look at.
+  function overCard(list) {
+    const { act } = planActuals(list);
+    const over = PLAN_LINES.map((l) => ({ l, p: planOf(l.k), a: act[l.k] || 0 })).filter((x) => x.a > x.p + 0.5).sort((a, b) => (b.a - b.p) - (a.a - a.p)).slice(0, 5);
+    if (!over.length) return '';
+    return `<div class="card"><h2>تجاوزت الخطة <button class="link" data-go="reports">التفاصيل</button></h2><div class="cats">
+      ${over.map((x) => `<div class="catrow"><span class="ic" aria-hidden="true">⚠</span><span class="nm">${esc(x.l.n)} <span class="small muted">${esc(x.l.s)}</span></span><span class="amt delta-up">+${fmt(x.a - x.p, 0)}</span>
+        <span class="meta">${x.p ? 'فعلي ' + fmt(x.a, 0) + ' من مخطط ' + fmt(x.p, 0) : 'غير مخطط له · ' + fmt(x.a, 0) + ' ر.س'}</span></div>`).join('')}</div></div>`;
   }
 
   function svgEl(w, h, inner) { return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img">${inner}</svg><div class="tip" hidden></div>`; }
@@ -652,7 +700,7 @@ Date: ${iso(new Date()).slice(0, 10)} 08:05`;
     const daily = new Array(p.days).fill(0);
     list.forEach((t) => { if (t.type !== 'income') { const i = Math.floor((parseIso(t.date) - p.start) / 86400000); if (i >= 0 && i < p.days) daily[i] += t.amount; } });
     const el2 = elapsed(p);
-    const lastIdx = el2.current ? el2.daysGone - 1 : p.days - 1;
+    const lastIdx = el2.current ? el2.daysGone - 1 : new Date() < p.start ? -1 : p.days - 1;
     const cum = []; let s = 0;
     for (let i = 0; i <= lastIdx; i++) { s += daily[i]; cum.push(s); }
     const ymax = niceMax(Math.max(budget, s) * 1.05);
@@ -725,6 +773,12 @@ Date: ${iso(new Date()).slice(0, 10)} 08:05`;
     <details class="card"><summary>خطة الإكسيل (بنود الميزانية)</summary>
       <p class="small muted" style="margin-top:0">نفس بنود ورقة OCT-26. كل عملية تُربط ببند، وعند التصدير يظهر البند في عمود «البند في الميزانية» فتلصقه في ورقة الحركات ويتحدث الإكسيل تلقائياً.</p>
       <div class="field" style="margin-bottom:10px"><label for="s-income">الدخل الشهري المخطط (ر.س)</label><input id="s-income" type="text" inputmode="decimal" value="${esc(planIncome())}"></div>
+      <div class="row2" style="margin-bottom:10px">
+        <div class="field"><label for="s-egp">سعر الريال بالجنيه</label><input id="s-egp" type="text" inputmode="decimal" value="${esc(state.profile.egpRate || PLAN_EGP_RATE)}"></div>
+        <div class="field"><label for="s-early">الراتب المبكر</label><select id="s-early"><option value="on" ${state.profile.earlySalary !== false ? 'selected' : ''}>يُحسب للشهر التالي</option><option value="off" ${state.profile.earlySalary === false ? 'selected' : ''}>حسب تاريخه</option></select></div>
+      </div>
+      <p class="small muted" style="margin:0 0 10px">الراتب الذي يصل في آخر ${fmt(state.profile.earlySalaryDays || 7, 0)} أيام من الشهر يُحسب تلقائياً في ميزانية الشهر التالي. ويمكنك تغيير شهر أي عملية من شاشة تعديلها.</p>
+      <div class="btns" style="margin-bottom:12px"><button class="btn ghost" data-act="plan-suggest">اقترح الخطة من الشهر السابق</button></div>
       <button class="btn ghost" data-act="plan-budget" style="margin-bottom:12px">اجعل ميزانية الشهر = إجمالي الخطة (${fmt(PLAN_LINES.reduce((a, l) => a + planOf(l.k), 0), 0)} ر.س)</button>
       ${SECTIONS.map((sec) => `<div class="lbl" style="margin:10px 0 6px;font-weight:600">${esc(sec)}</div><div class="set-list">${PLAN_LINES.filter((l) => l.s === sec).map((l, i) => `<div class="setrow plan"><span class="small muted">${esc(l.t)}</span><label for="pl-${esc(sec)}-${i}">${esc(l.n)}</label><input id="pl-${esc(sec)}-${i}" type="text" inputmode="decimal" data-plan="${esc(l.k)}" value="${planOf(l.k) ? esc(Math.round(planOf(l.k) * 100) / 100) : ''}" placeholder="—"></div>`).join('')}</div>`).join('')}
     </details>
@@ -787,6 +841,7 @@ Date: ${iso(new Date()).slice(0, 10)} 08:05`;
         <div class="field"><label for="e-amount">المبلغ (ر.س)</label><input id="e-amount" type="text" inputmode="decimal" value="${esc(t.amount)}"></div>
         <div class="field"><label for="e-cat">الفئة</label>${catSelect(t.type, t.cat, 'id="e-cat"')}</div>
       </div>
+      <div class="field"><label for="e-bm">يُحسب في ميزانية شهر</label>${bmSelect(t, 'id="e-bm"')}</div>
       <div class="field"><label for="e-line">البند في الميزانية (ملف الإكسيل)</label>${lineSelect(lineOf(t), 'id="e-line"')}</div>
       <div class="field"><label for="e-merchant">المتجر أو الوصف</label><input id="e-merchant" type="text" dir="auto" value="${esc(t.merchant)}"></div>
       <div class="row2">
@@ -799,6 +854,12 @@ Date: ${iso(new Date()).slice(0, 10)} 08:05`;
       ${t.sample ? '' : `<div class="btns"><button class="btn" data-act="save-edit" style="flex:1">حفظ التعديل</button>
         ${e.confirmDel ? '<button class="btn danger" data-act="del-yes">تأكيد الحذف</button>' : '<button class="btn ghost" data-act="del" style="color:var(--bad)">حذف</button>'}</div>`}
     </div></div>`;
+  }
+
+  function bmSelect(t, attrs) {
+    const own = periodOfDate(t.date), prev = periodOfDate(iso(new Date(own.start.getTime() - 86400000))), next = periodOfDate(own.e);
+    const opt = (v, label) => `<option value="${v}" ${(t.bm || '') === v ? 'selected' : ''}>${esc(label)}</option>`;
+    return `<select ${attrs}>${opt('', 'حسب تاريخ العملية (' + periodLabel(own) + ')')}${opt(periodKey(next), 'الشهر التالي: ' + periodLabel(next))}${opt(periodKey(prev), 'الشهر السابق: ' + periodLabel(prev))}</select>`;
   }
 
   // ---------- actions ----------
@@ -852,7 +913,7 @@ Date: ${iso(new Date()).slice(0, 10)} 08:05`;
     const e = state.editing, t = e.t;
     const amount = toNum($('#e-amount').value);
     if (!(amount > 0)) { toast('المبلغ غير صحيح'); return; }
-    const patch = { type: t.type, amount: Math.round(amount * 100) / 100, cat: $('#e-cat').value, merchant: $('#e-merchant').value.trim(), date: $('#e-date').value || t.date, method: $('#e-method').value, note: $('#e-note').value.trim(), line: $('#e-line').value };
+    const patch = { type: t.type, amount: Math.round(amount * 100) / 100, cat: $('#e-cat').value, merchant: $('#e-merchant').value.trim(), date: $('#e-date').value || t.date, method: $('#e-method').value, note: $('#e-note').value.trim(), line: $('#e-line').value, bm: $('#e-bm').value };
     if ($('#e-remember') && $('#e-remember').checked && patch.merchant) {
       const nm = normalizeMerchant(patch.merchant);
       // Generic names (a bare «حوالة») would capture every transfer, so only the category is remembered for them.
@@ -936,13 +997,13 @@ Date: ${iso(new Date()).slice(0, 10)} 08:05`;
     if (d.digits) { setProfile({ digits: d.digits }); render(); return; }
     if (d.delrule) { const r = { ...(state.profile.rules || {}) }; delete r[d.delrule]; setProfile({ rules: r }); render(); return; }
     if (d.etype) {
-      const e = state.editing; e.t = { ...e.t, amount: $('#e-amount').value, merchant: $('#e-merchant').value, date: $('#e-date').value, method: $('#e-method').value, note: $('#e-note').value, line: $('#e-line').value, type: d.etype };
+      const e = state.editing; e.t = { ...e.t, amount: $('#e-amount').value, merchant: $('#e-merchant').value, date: $('#e-date').value, method: $('#e-method').value, note: $('#e-note').value, line: $('#e-line').value, bm: $('#e-bm').value, type: d.etype };
       e.t.cat = d.etype === 'income' ? (CAT[e.t.cat]?.kind === 'income' ? e.t.cat : 'income_other') : (CAT[e.t.cat]?.kind === 'expense' ? e.t.cat : 'other');
       renderSheet(); return;
     }
     switch (d.act) {
       case 'prev': state.offset--; render(); break;
-      case 'next': if (state.offset < 0) { state.offset++; render(); } break;
+      case 'next': if (state.offset < 3) { state.offset++; render(); } break;
       case 'parse': doParse(); break;
       case 'example': $('#sms-in').value = SMS_EXAMPLE; doParse(); break;
       case 'clear-sms': $('#sms-in').value = ''; state.parsed = []; render(); break;
@@ -955,6 +1016,13 @@ Date: ${iso(new Date()).slice(0, 10)} 08:05`;
       case 'export': exportCsv(); break;
       case 'backup': exportBackup(); break;
       case 'show-noline': state.tab = 'txns'; state.txFilter = { q: '', type: '', cat: '__noline' }; render(); window.scrollTo(0, 0); break;
+      case 'plan-suggest': {
+        // Lines with no plan (or overspent) take last period's actual, rounded up to 50.
+        const { act } = planActuals(inPeriod(periodAt(state.offset - 1)));
+        const pl = { ...(state.profile.plan || {}) }; let n = 0;
+        PLAN_LINES.forEach((l) => { const a = act[l.k] || 0; if (a > planOf(l.k)) { pl[l.k] = Math.ceil(a / 50) * 50; n++; } });
+        setProfile({ plan: pl }); toast(n ? 'تم تعديل ' + fmt(n, 0) + ' بنود حسب صرف الشهر السابق' : 'الخطة تغطي صرف الشهر السابق'); render(); break;
+      }
       case 'plan-budget': setProfile({ budget: Math.round(PLAN_LINES.reduce((a, l) => a + planOf(l.k), 0)) }); toast('تم تحديث ميزانية الشهر'); render(); break;
       case 'sms-enable': if (Native) Native.requestSmsPermission(); break;
       case 'sms-sync': { const n = syncSms(); if (!n) toast('لا توجد رسائل بنك جديدة'); break; }
@@ -977,6 +1045,8 @@ Date: ${iso(new Date()).slice(0, 10)} 08:05`;
     if (el.dataset.pinc !== undefined) { const r = state.parsed[+el.dataset.pinc]; r.include = el.checked; render(); return; }
     if (el.dataset.pf) { readParsedField(el); return; }
     if (el.id === 's-budget') { const n = toNum(el.value); if (n > 0) { setProfile({ budget: Math.round(n) }); toast('تم تحديث الميزانية'); } else el.value = state.profile.budget; return; }
+    if (el.id === 's-egp') { const n = toNum(el.value); if (n > 0) { setProfile({ egpRate: n }); toast('تم تحديث سعر الجنيه'); } return; }
+    if (el.id === 's-early') { setProfile({ earlySalary: el.value === 'on' }); toast('تم الحفظ'); return; }
     if (el.id === 's-income') { const n = toNum(el.value); if (n > 0) { setProfile({ planIncome: Math.round(n * 100) / 100 }); toast('تم تحديث الدخل المخطط'); } return; }
     if (el.dataset.plan) {
       const n = toNum(el.value), pl = { ...(state.profile.plan || {}) };
